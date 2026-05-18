@@ -1,0 +1,130 @@
+services:
+  # === BROKERS MQTT ===
+
+  # Broker Remoto (Cloud/Datacenter): Los subscribers se conectan aquí
+  mqtt_remote:
+    image: eclipse-mosquitto:2.0
+    container_name: local-mqtt-remote
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    ports:
+      - "1884:1883"
+    restart: unless-stopped
+
+  # Edge Gateway (Campo/Finca): Sensores y actuadores se conectan aquí.
+  # Actúa como proxy, reenviando mensajes al broker remoto a través de un Bridge MQTT.
+  mqtt_edge_gateway:
+    image: eclipse-mosquitto:2.0
+    container_name: local-mqtt-edge-gateway
+    volumes:
+      - ./edge_gateway/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    ports:
+      - "1883:1883"
+    depends_on:
+      - mqtt_remote
+    restart: unless-stopped
+
+  # === PUBLISHERS (Sensores en el campo → conectan al Edge Gateway) ===
+  
+  sensor_temp:
+    build: 
+      context: ./python_apps
+    container_name: local-sensor-temp
+    command: ["python", "-u", "publishers/sensor_temp.py"]
+    environment:
+      - MQTT_BROKER=mqtt_edge_gateway
+    depends_on:
+      - mqtt_edge_gateway
+    restart: unless-stopped
+
+  sensor_humidity:
+    build: 
+      context: ./python_apps
+    container_name: local-sensor-humidity
+    command: ["python", "-u", "publishers/sensor_humidity.py"]
+    environment:
+      - MQTT_BROKER=mqtt_edge_gateway
+    depends_on:
+      - mqtt_edge_gateway
+    restart: unless-stopped
+
+  sensor_wind:
+    build: 
+      context: ./python_apps
+    container_name: local-sensor-wind
+    command: ["python", "-u", "publishers/sensor_wind.py"]
+    environment:
+      - MQTT_BROKER=mqtt_edge_gateway
+    depends_on:
+      - mqtt_edge_gateway
+    restart: unless-stopped
+
+  # === SUBSCRIBERS (Lógica en la nube → conectan al Broker Remoto) ===
+
+  subscriber_all:
+    build: 
+      context: ./python_apps
+    container_name: local-sub-all
+    command: ["python", "-u", "subscribers/sub_all.py"]
+    environment:
+      - MQTT_BROKER=mqtt_remote
+    depends_on:
+      - mqtt_remote
+    restart: unless-stopped
+
+  subscriber_humidity:
+    build: 
+      context: ./python_apps
+    container_name: local-sub-humidity
+    command: ["python", "-u", "subscribers/sub_humidity.py"]
+    environment:
+      - MQTT_BROKER=mqtt_remote
+    depends_on:
+      - mqtt_remote
+    restart: unless-stopped
+
+  subscriber_temperature:
+    build: 
+      context: ./python_apps
+    container_name: local-sub-temperature
+    command: ["python", "-u", "subscribers/sub_temperature.py"]
+    environment:
+      - MQTT_BROKER=mqtt_remote
+    depends_on:
+      - mqtt_remote
+    restart: unless-stopped
+
+  # === ACTUATORS (Dispositivos en el campo → conectan al Edge Gateway) ===
+
+  actuator_water_valve:
+    build: 
+      context: ./python_apps
+    container_name: local-actuator-water-valve
+    command: ["python", "-u", "actuators/water_valve.py"]
+    environment:
+      - MQTT_BROKER=mqtt_edge_gateway
+    depends_on:
+      - mqtt_edge_gateway
+    restart: unless-stopped
+
+  actuator_heater:
+    build: 
+      context: ./python_apps
+    container_name: local-actuator-heater
+    command: ["python", "-u", "actuators/heater.py"]
+    environment:
+      - MQTT_BROKER=mqtt_edge_gateway
+    depends_on:
+      - mqtt_edge_gateway
+    restart: unless-stopped
+
+  actuator_fan:
+    build: 
+      context: ./python_apps
+    container_name: local-actuator-fan
+    command: ["python", "-u", "actuators/fan.py"]
+    environment:
+      - MQTT_BROKER=mqtt_edge_gateway
+    depends_on:
+      - mqtt_edge_gateway
+    restart: unless-stopped

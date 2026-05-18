@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECS Cloud Demo</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="background-animation"></div>
+    <main class="container">
+        <header>
+            <div class="logo-container">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M19.4285 10.3396C18.9959 7.21447 16.3262 4.80005 13.1111 4.80005C10.5183 4.80005 8.24355 6.27361 7.20177 8.52554C4.18562 8.70773 1.77777 11.206 1.77777 14.2667C1.77777 17.4326 4.34515 20 7.5111 20H18.6666C21.0594 20 23 18.0594 23 15.6667C23 13.5606 21.4962 11.8055 19.4285 10.3396Z" fill="url(#paint0_linear)"/>
+                        <defs>
+                            <linearGradient id="paint0_linear" x1="1.77777" y1="4.80005" x2="23" y2="20" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#3B82F6" />
+                                <stop offset="1" stop-color="#8B5CF6" />
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <h1>Cloud<span>PUJ</span></h1>
+            </div>
+            <p class="subtitle">Desplegado exitosamente en AWS ECS con Terraform</p>
+        </header>
+
+        <section class="cards">
+            <div class="card">
+                <div class="card-icon">🏗️</div>
+                <h3>Infraestructura como Código</h3>
+                <p>Provisionado 100% con Terraform utilizando módulos reutilizables.</p>
+            </div>
+            <div class="card">
+                <div class="card-icon">🐳</div>
+                <h3>Contenedores</h3>
+                <p>Empaquetado con Docker y almacenado de forma segura en Amazon ECR.</p>
+            </div>
+            <div class="card">
+                <div class="card-icon">⚖️</div>
+                <h3>Alta Disponibilidad</h3>
+                <p>Servido a través de un Application Load Balancer con múltiples tareas de Fargate.</p>
+            </div>
+        </section>
+
+        <footer>
+            <button class="primary-btn" onclick="animateSuccess()">Verificar Conexión</button>
+            <p id="status-message"></p>
+        </footer>
+    </main>
+
+    <script>
+        function animateSuccess() {
+            const btn = document.querySelector('.primary-btn');
+            const msg = document.getElementById('status-message');
+            
+            btn.style.transform = 'scale(0.95)';
+            setTimeout(() => {
+                btn.style.transform = 'scale(1)';
+                msg.textContent = '¡Conexión exitosa! El servicio ECS está respondiendo correctamente.';
+                msg.style.opacity = '1';
+                msg.style.transform = 'translateY(0)';
+            }, 150);
+        }
+    </script>
+</body>
+</html>

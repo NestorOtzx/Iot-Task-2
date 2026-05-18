@@ -1,0 +1,2 @@
+# Ejecutar
+make all

@@ -1,0 +1,35 @@
+services:
+  lb:
+    image: haproxy:latest
+    container_name: load_balancer
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "5001:80"
+    depends_on:
+      - web1
+      - web2
+
+  web1:
+    image: alpine:latest
+    container_name: web1
+    hostname: web1
+    ports:
+      - "8081:80"
+    command: >
+      sh -c "apk add --no-cache apache2 &&  mkdir -p /run/apache2 && INSTANCE_HOSTNAME=$(hostname) && echo \"<html> <body style='font-family: sans-serif; text-align: center;'>
+          <h1>Alpine Linux funcionando!</h1>
+          <p>Instancia: <b>$$INSTANCE_HOSTNAME</b></p>
+      </body> </html>\" > /var/www/localhost/htdocs/index.html && httpd -D FOREGROUND"
+
+  web2:
+    image: alpine:latest
+    container_name: web2
+    ports:
+      - "8082:80"
+    hostname: web2
+    command: >
+      sh -c "apk add --no-cache apache2 &&  mkdir -p /run/apache2 && INSTANCE_HOSTNAME=$(hostname) && echo \"<html> <body style='font-family: sans-serif; text-align: center;'>
+          <h1>Alpine Linux funcionando!</h1>
+          <p>Instancia: <b>$$INSTANCE_HOSTNAME</b></p>
+      </body> </html>\" > /var/www/localhost/htdocs/index.html && httpd -D FOREGROUND"
