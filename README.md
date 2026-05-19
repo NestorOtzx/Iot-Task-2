@@ -1,20 +1,51 @@
-# Build docker image
-sudo docker build -t iot_dev_environment_image .
+# Docker AWS CLI para este proyecto
 
-# Create docker container
-sudo docker run -it --name iot_dev_environment -v /home/callanor/Dropbox/puj/iot/learnerLabCode:/app iot_dev_environment_image bash
+Usa estos comandos desde la carpeta raiz del proyecto. La carpeta actual se monta en `/app`, asi que cualquier archivo que crees o modifiques dentro del contenedor se vera tambien en esta carpeta.
 
-# Create docker detach 
-sudo docker run -d --name iot_dev_environment -v /home/callanor/Dropbox/puj/iot/learnerLabCode:/app iot_dev_environment_image
+## 1. Construir la imagen
 
-# ssh into docker container
-sudo docker exec -ti --name iot_dev_environment bash
+```powershell
+docker build -t iot_dev_environment_image .
+```
 
+## 2. Crear y abrir el contenedor en esta carpeta
 
-# Configure AWS CLI in docker container
-1. Launch Learner Lab
-2. In the prompt cat .aws/credentials
-3. In the docker container: aws configure
-    - use the learnerLab credentials
-4. In /root/.aws/credentials put the learnerLab credentials
-4. Test, aws s3 ls
+Este comando monta este proyecto en `/app` y te deja dentro del contenedor listo para trabajar.
+
+```powershell
+docker run --rm -it --name iot_dev_environment `
+  -v ${PWD}:/app `
+  -w /app `
+  iot_dev_environment_image bash
+```
+
+## 3. Volver a entrar al contenedor si lo dejas corriendo
+
+Si prefieres levantarlo en segundo plano:
+
+```powershell
+docker run -d --name iot_dev_environment `
+  -v ${PWD}:/app `
+  -w /app `
+  iot_dev_environment_image tail -f /dev/null
+```
+
+Luego entra con:
+
+```powershell
+docker exec -it iot_dev_environment bash
+```
+
+## 4. Probar AWS CLI dentro del contenedor
+
+Dentro del contenedor configura AWS manualmente:
+
+```bash
+aws configure
+```
+
+Luego prueba:
+
+```bash
+aws s3 ls
+```
