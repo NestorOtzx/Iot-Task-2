@@ -22,7 +22,7 @@ resource "aws_iot_policy" "sensor_policy" {
         Effect   = "Allow"
         Resource = ["arn:aws:iot:${var.region}:${var.account_id}:client/${aws_iot_thing.edge_gateway.name}"]
       },
-      
+
       # Statement 2 (Publish / Receive): Permite al dispositivo enviar (Publish) datos a AWS IoT Core 
       # y recibir (Receive) mensajes que le lleguen a través de tópicos específicos.
       # Seguridad: Solo puede interactuar con la jerarquía de tópicos 'lab/sensors/*'
@@ -31,7 +31,7 @@ resource "aws_iot_policy" "sensor_policy" {
         Effect   = "Allow"
         Resource = ["arn:aws:iot:${var.region}:${var.account_id}:topic/lab/sensors/*"]
       },
-      
+
       # Statement 3 (Subscribe): Permite al dispositivo solicitar la suscripción a un tópico MQTT.
       # Seguridad: Utiliza el recurso 'topicfilter' (que permite comodines de MQTT como # y +).
       # Esto autoriza al Edge Gateway a suscribirse para escuchar cualquier sub-tópico de 'lab/sensors/'.
@@ -158,5 +158,27 @@ resource "aws_iot_topic_rule" "s3_rule" {
   }
 }
 
-# Regla 3
+# Regla 3 de Alertas por temperatura:
+# Escucha cualquier topico con forma 'lab/<sensor>/data' y filtra solo eventos de temperatura
+# cuyo valor supere 30. Cuando el filtro se cumple, IoT Core invoca la Lambda de alerta.
+resource "aws_iot_topic_rule" "temperature_alert_rule" {
+  name        = "TemperatureAlertToLambda_${var.environment}"
+  description = "Dispara una Lambda cuando un sensor de temperatura supera el umbral critico"
+  enabled     = true
+  sql         = "SELECT *, topic() AS source_topic FROM 'lab/+/data' WHERE sensor_type = 'temperature' AND value > 30"
+  sql_version = "2016-03-23"
 
+  lambda {
+    function_arn = var.alert_lambda_arn
+  }
+}
+
+# Permiso para que AWS IoT Core pueda invocar la Lambda de alerta.
+# Sin esta politica basada en recurso, la regla existiria pero fallaria al ejecutar la accion Lambda.
+resource "aws_lambda_permission" "allow_iot_temperature_alert" {
+  statement_id  = "AllowExecutionFromIoTAlertRule${var.environment}"
+  action        = "lambda:InvokeFunction"
+  function_name = var.alert_lambda_function_name
+  principal     = "iot.amazonaws.com"
+  source_arn    = aws_iot_topic_rule.temperature_alert_rule.arn
+}
