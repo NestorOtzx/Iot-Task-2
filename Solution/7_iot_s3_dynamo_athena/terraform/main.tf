@@ -35,10 +35,21 @@ module "database" {
 
 # Modulo de Computo (Lambdas, SQS y CloudWatch Logs)
 module "compute" {
-  source       = "./modules/compute"
-  project_name = var.project_name
-  environment  = var.environment
-  lab_role_arn = data.aws_iam_role.lab_role.arn
+  source                     = "./modules/compute"
+  project_name               = var.project_name
+  environment                = var.environment
+  lab_role_arn               = data.aws_iam_role.lab_role.arn
+  region                     = data.aws_region.current.name
+  sensor_bucket_name         = module.storage.sensor_bucket_name
+  athena_results_bucket_name = module.storage.athena_results_bucket_name
+  athena_database_name       = module.storage.athena_database_name
+  athena_table_name          = module.storage.athena_table_name
+  sensor_table_name          = module.database.sensor_table_name
+  postgres_endpoint          = module.database.postgres_endpoint
+  postgres_port              = module.database.postgres_port
+  postgres_db_name           = module.database.postgres_db_name
+  postgres_username          = module.database.postgres_username
+  postgres_password          = module.database.postgres_password
 }
 
 # Módulo de IoT Core

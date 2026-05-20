@@ -38,3 +38,26 @@ services:
     depends_on:
       - mosquitto
     restart: unless-stopped
+
+  # API REST Unificada
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: iot-sensor-api
+    ports:
+      - "8000:8000"
+    environment:
+      - AWS_REGION=us-east-1
+      - SENSOR_TABLE_NAME=${SENSOR_TABLE_NAME:-SensorData-lab}
+      - ATHENA_DATABASE=${ATHENA_DATABASE:-iot_edge_lab_analytics}
+      - ATHENA_TABLE=${ATHENA_TABLE:-sensor_data}
+      - ATHENA_RESULTS_BUCKET=${ATHENA_RESULTS_BUCKET:-}
+      - PG_HOST=${PG_HOST:-}
+      - PG_PORT=${PG_PORT:-5432}
+      - PG_DATABASE=${PG_DATABASE:-iot_metadata}
+      - PG_USER=${PG_USER:-iot_admin}
+      - PG_PASSWORD=${PG_PASSWORD:-}
+    volumes:
+      - ${USERPROFILE}/.aws:/root/.aws:ro
+    restart: unless-stopped
