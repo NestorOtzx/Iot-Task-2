@@ -1,6 +1,9 @@
 # Local .terraform directories
 .terraform/
 
+# Local solution workspace with generated certificates, packages, and lab artifacts
+Solution/
+
 # .tfstate files
 *.tfstate
 *.tfstate.*
