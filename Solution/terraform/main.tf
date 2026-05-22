@@ -35,10 +35,11 @@ module "database" {
 
 # Modulo de Computo (Lambdas, SQS y CloudWatch Logs)
 module "compute" {
-  source       = "./modules/compute"
-  project_name = var.project_name
-  environment  = var.environment
-  lab_role_arn = data.aws_iam_role.lab_role.arn
+  source            = "./modules/compute"
+  project_name      = var.project_name
+  environment       = var.environment
+  lab_role_arn      = data.aws_iam_role.lab_role.arn
+  sensor_table_name = module.database.sensor_table_name
 }
 
 # Módulo de IoT Core
@@ -60,9 +61,11 @@ module "iot" {
 
   # Variables inyectadas desde outputs de otros módulos
   sensor_bucket_name = module.storage.sensor_bucket_name
-  sensor_table_name  = module.database.sensor_table_name
-
   # Lambda que recibe las alertas filtradas por IoT Core antes de enviarlas a SQS.
   alert_lambda_arn           = module.compute.alert_lambda_arn
   alert_lambda_function_name = module.compute.alert_lambda_function_name
+
+  # Lambda que escribe en DynamoDB y mantiene un maximo de 10 registros por sensor.
+  dynamodb_writer_lambda_arn           = module.compute.dynamodb_writer_lambda_arn
+  dynamodb_writer_lambda_function_name = module.compute.dynamodb_writer_lambda_function_name
 }

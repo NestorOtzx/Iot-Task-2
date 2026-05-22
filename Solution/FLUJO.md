@@ -59,20 +59,19 @@ Hemos configurado dos reglas principales:
 1. **Regla de S3 (Cold Data / Histórico):**
    - **Objetivo:** Guardar todos los eventos para analítica histórica a largo plazo (Big Data).
    - **Acción:** Cada mensaje es interceptado y guardado como un archivo JSON en un **Bucket de Amazon S3**.
-   - **Estructura:** Se organizan automáticamente por particiones de tiempo (`year=.../month=.../day=...`), lo cual es una mejor práctica para poder consultarlos después usando Amazon Athena de forma eficiente.
+   - **Estructura:** Se organizan automáticamente por particiones de tiempo (`year=.../month=.../day=...`), lo cual facilita procesos históricos posteriores sin depender de un motor analítico adicional.
 
-2. **Regla de DynamoDB (Hot Data / Estado Actual):**
-   - **Objetivo:** Mantener el estado más reciente de cada dispositivo para dashboards en tiempo real.
-   - **Acción:** Inserta o actualiza el registro en una tabla de **Amazon DynamoDB**.
+2. **Regla de DynamoDB (Hot Data / Últimos 10 Eventos):**
+   - **Objetivo:** Mantener una ventana corta con los últimos 10 eventos de cada sensor para consultas rápidas.
+   - **Acción:** Invoca una Lambda que inserta el evento en **Amazon DynamoDB** y elimina los registros antiguos que excedan el límite por sensor.
 
 ### Diseño de la Tabla en DynamoDB
-La tabla `SensorData` fue diseñada con una característica muy específica en mente:
-- Tiene **únicamente una Clave de Partición (Partition Key o Hash Key)** llamada `device_id`.
-- **No tiene Clave de Ordenamiento (Sort Key).**
+La tabla `SensorData` fue diseñada para conservar una ventana corta por sensor:
+- Tiene una **Clave de Partición (Partition Key o Hash Key)** llamada `device_id`.
+- Tiene una **Clave de Ordenamiento (Sort Key)** llamada `timestamp`.
 
 **¿Qué pasa cuando se mandan eventos a DynamoDB?**
-Al no tener una Sort Key, la clave primaria es solo el ID del dispositivo. Cada vez que llega un nuevo evento (por ejemplo, del sensor `sensor-temp-01`), DynamoDB **sobrescribe** el registro anterior que tenía ese mismo ID. 
-De esta forma, la tabla nunca crece infinitamente con el historial; simplemente actúa como un **"Device Twin"** o **"Device Shadow"**, manteniendo siempre la última temperatura o humedad conocida.
+Cada evento se guarda como un registro independiente bajo el mismo `device_id`, ordenado por `timestamp`. Después de insertar, una Lambda consulta los eventos de ese sensor y elimina los más antiguos para conservar únicamente los últimos 10.
 
 ---
 
@@ -92,9 +91,7 @@ graph TD
         IOT -->|Regla SQL: SELECT *| DynamoAction(Acción DynamoDB)
         
         S3Action -->|PutObject| S3Bucket[(S3 Bucket\nDatos Históricos)]
-        DynamoAction -->|PutItem| DDB[(DynamoDB\nEstado Actual)]
-        
-        S3Bucket -.->|Particionado\n/year/month/day/| Athena(Amazon Athena\nPara Analítica)
+        DynamoAction -->|Lambda PutItem + Delete antiguos| DDB[(DynamoDB\nÚltimos 10 Eventos)]
     end
     
     style S1 fill:#f9f,stroke:#333,stroke-width:2px
@@ -110,5 +107,5 @@ graph TD
 2. Mosquitto recibe los datos localmente y los enruta automáticamente a AWS IoT Core usando una conexión encriptada y autenticada por certificados X.509 generados por Terraform.
 3. AWS IoT Core procesa los datos en tiempo real mediante su motor de reglas.
 4. El dato se bifurca:
-   - Una copia actualiza el estado "en vivo" en DynamoDB (sobreescribiendo el valor anterior del mismo sensor).
-   - Una copia se archiva permanentemente en S3 (acumulándose) para análisis futuro con Athena.
+   - Una copia actualiza la ventana rápida en DynamoDB, manteniendo únicamente los últimos 10 eventos por sensor.
+   - Una copia se archiva permanentemente en S3 como historial completo.

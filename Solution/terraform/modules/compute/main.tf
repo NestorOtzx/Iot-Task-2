@@ -14,6 +14,14 @@ data "archive_file" "lambda_cloudwatch_zip" {
   output_path = "${path.module}/lambda_cloudwatch.zip"
 }
 
+# Empaqueta la Lambda que reemplaza la escritura directa de IoT a DynamoDB.
+# Esta funcion guarda cada evento y elimina los registros antiguos para dejar maximo 10 por sensor.
+data "archive_file" "dynamodb_retention_writer_zip" {
+  type        = "zip"
+  source_file = "${path.root}/src/dynamodb_retention_writer/lambda_function.py"
+  output_path = "${path.module}/dynamodb_retention_writer.zip"
+}
+
 # Cola SQS que desacopla la alerta recibida por IoT del procesamiento en CloudWatch.
 # Si la Lambda de CloudWatch falla temporalmente, SQS conserva el mensaje para reintentos.
 resource "aws_sqs_queue" "alert_queue" {
@@ -101,4 +109,29 @@ resource "aws_lambda_event_source_mapping" "alert_queue_to_cloudwatch" {
   function_name    = aws_lambda_function.lambda_cloudwatch.arn
   batch_size       = 1
   enabled          = true
+}
+
+# Lambda que recibe todos los eventos de sensores desde IoT Core.
+# Escribe el evento en DynamoDB y aplica la regla de negocio: maximo 10 registros por device_id.
+resource "aws_lambda_function" "dynamodb_retention_writer" {
+  function_name                  = "${var.project_name}-${var.environment}-dynamodb-retention-writer"
+  role                           = var.lab_role_arn
+  handler                        = "lambda_function.lambda_handler"
+  runtime                        = "python3.12"
+  filename                       = data.archive_file.dynamodb_retention_writer_zip.output_path
+  source_code_hash               = data.archive_file.dynamodb_retention_writer_zip.output_base64sha256
+  timeout                        = 10
+  reserved_concurrent_executions = 1
+
+  environment {
+    variables = {
+      SENSOR_TABLE_NAME     = var.sensor_table_name
+      MAX_EVENTS_PER_SENSOR = "10"
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
 }

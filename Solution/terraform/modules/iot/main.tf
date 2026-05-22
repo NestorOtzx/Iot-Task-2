@@ -1,40 +1,29 @@
-# Creación del Thing (Dispositivo Edge Gateway)
+# Thing que representa al Edge Gateway local dentro de AWS IoT Core.
 resource "aws_iot_thing" "edge_gateway" {
   name = "edge-gateway-01-${var.environment}"
 }
 
-# Creación de los certificados
+# Certificado X.509 usado por Mosquitto para autenticarse con IoT Core mediante mTLS.
 resource "aws_iot_certificate" "cert" {
   active = true
 }
 
-# Creación de la política de IoT
+# Politica de IoT para limitar que el certificado solo conecte y publique en los topicos del laboratorio.
 resource "aws_iot_policy" "sensor_policy" {
   name = "EdgeGatewayPolicy-${var.environment}"
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      # Statement 1 (Connect): Permite al dispositivo establecer una conexión MQTT con AWS IoT Core.
-      # Seguridad: Se restringe el recurso a un 'client' específico. Esto asegura que nadie más pueda 
-      # conectarse a AWS IoT usando estos certificados si intenta usar un Client ID diferente.
       {
         Action   = ["iot:Connect"]
         Effect   = "Allow"
         Resource = ["arn:aws:iot:${var.region}:${var.account_id}:client/${aws_iot_thing.edge_gateway.name}"]
       },
-
-      # Statement 2 (Publish / Receive): Permite al dispositivo enviar (Publish) datos a AWS IoT Core 
-      # y recibir (Receive) mensajes que le lleguen a través de tópicos específicos.
-      # Seguridad: Solo puede interactuar con la jerarquía de tópicos 'lab/sensors/*'
       {
         Action   = ["iot:Publish", "iot:Receive"]
         Effect   = "Allow"
         Resource = ["arn:aws:iot:${var.region}:${var.account_id}:topic/lab/sensors/*"]
       },
-
-      # Statement 3 (Subscribe): Permite al dispositivo solicitar la suscripción a un tópico MQTT.
-      # Seguridad: Utiliza el recurso 'topicfilter' (que permite comodines de MQTT como # y +).
-      # Esto autoriza al Edge Gateway a suscribirse para escuchar cualquier sub-tópico de 'lab/sensors/'.
       {
         Action   = ["iot:Subscribe"]
         Effect   = "Allow"
@@ -44,61 +33,54 @@ resource "aws_iot_policy" "sensor_policy" {
   })
 }
 
-# Adjuntar política al certificado
-# Relaciona la política de seguridad (permisos) creada arriba con el certificado X.509.
-# Sin esto, el certificado sería válido criptográficamente pero no tendría autorización para hacer nada en AWS.
+# Adjunta la politica al certificado para que el dispositivo tenga permisos efectivos.
 resource "aws_iot_policy_attachment" "att" {
   policy = aws_iot_policy.sensor_policy.name
   target = aws_iot_certificate.cert.arn
 }
 
-# Adjuntar certificado al Thing
-# Relaciona el certificado X.509 con el "Thing" (la representación virtual de nuestro Edge Gateway).
-# Esto completa la cadena de identidad lógica: Dispositivo Físico <-> Certificado <-> Política de Permisos.
+# Relaciona el certificado con el Thing del Edge Gateway.
 resource "aws_iot_thing_principal_attachment" "att" {
   principal = aws_iot_certificate.cert.arn
   thing     = aws_iot_thing.edge_gateway.name
 }
 
-# Escribir los certificados generados al disco local (Edge Gateway)
-# Extrae el contenido PEM del certificado y lo guarda como archivo para que Mosquitto lo pueda leer.
+# Escribe el certificado PEM localmente para que el contenedor Mosquitto lo use.
 resource "local_file" "certificate_pem" {
   content  = aws_iot_certificate.cert.certificate_pem
   filename = "${path.root}/../edge_gateway/certs/certificate.pem.crt"
 }
 
-# Extrae la clave privada generada por AWS y la guarda localmente (¡este archivo es secreto!).
+# Escribe la clave privada localmente. Este archivo es secreto y no debe compartirse.
 resource "local_file" "private_key" {
   content  = aws_iot_certificate.cert.private_key
   filename = "${path.root}/../edge_gateway/certs/private.pem.key"
 }
 
-# Extrae la clave pública y la guarda en un archivo local.
+# Escribe la clave publica asociada al certificado.
 resource "local_file" "public_key" {
   content  = aws_iot_certificate.cert.public_key
   filename = "${path.root}/../edge_gateway/certs/public.pem.key"
 }
 
-# Guarda el certificado raíz de Amazon (Root CA) necesario para que Mosquitto verifique la identidad del servidor de AWS.
+# Escribe el Amazon Root CA que permite validar el endpoint de AWS IoT Core.
 resource "local_file" "root_ca" {
   content  = var.root_ca_pem
   filename = "${path.root}/../edge_gateway/certs/AmazonRootCA1.pem"
 }
 
-# Generar mosquitto.conf automáticamente inyectando el endpoint de AWS
-# Crea el archivo de configuración del broker local Mosquitto. Se usa un bloque heredoc (<<-EOT)
-# para definir el texto e interpolar dinámicamente el Endpoint ATS de AWS y el nombre del Thing.
+# Genera mosquitto.conf con el endpoint real de IoT Core y los paths de certificados del contenedor.
 resource "local_file" "mosquitto_conf" {
   content  = <<-EOT
-# Configuración del servidor local Mosquitto
+# Configuracion del servidor local Mosquitto
 listener 1883 0.0.0.0
 allow_anonymous true
 
-# Configuración del Bridge hacia AWS IoT Core
+# Configuracion del Bridge hacia AWS IoT Core
 connection awsiot
 address ${var.iot_endpoint}:8883
 
-# Mapeo de tópicos: local -> remoto
+# Mapeo de topicos: local -> remoto
 topic lab/sensors/data out 1 "" ""
 
 bridge_protocol_version mqttv311
@@ -110,7 +92,7 @@ start_type automatic
 notifications false
 keepalive_interval 60
 
-# Certificados TLS para la conexión con AWS
+# Certificados TLS para la conexion con AWS
 bridge_cafile /mosquitto/certs/AmazonRootCA1.pem
 bridge_certfile /mosquitto/certs/certificate.pem.crt
 bridge_keyfile /mosquitto/certs/private.pem.key
@@ -118,32 +100,31 @@ EOT
   filename = "${path.root}/../edge_gateway/mosquitto.conf"
 }
 
-# === REGLAS IOT ===
-
 # Regla 1 de DynamoDB:
-# Actúa como un suscriptor interno en AWS IoT Core. Escucha todo lo que llega a 'lab/sensors/data'
-# (vía la sentencia SQL) y ejecuta la acción "dynamodbv2", la cual inserta o actualiza 
-# el ítem en la tabla de DynamoDB usando el LabRole para tener permisos de escritura.
+# Envia cada evento a una Lambda que escribe en DynamoDB y elimina registros antiguos para conservar 10 por sensor.
 resource "aws_iot_topic_rule" "dynamodb_rule" {
   name        = "SensorDataToDynamoDB_${var.environment}"
-  description = "Guarda los eventos de sensores en DynamoDB"
+  description = "Guarda los ultimos 10 eventos por sensor en DynamoDB"
   enabled     = true
   sql         = "SELECT * FROM 'lab/sensors/data'"
   sql_version = "2016-03-23"
 
-  dynamodbv2 {
-    role_arn = var.lab_role_arn
-    put_item {
-      table_name = var.sensor_table_name
-    }
+  lambda {
+    function_arn = var.dynamodb_writer_lambda_arn
   }
 }
 
+# Permite que IoT Core invoque la Lambda de escritura y retencion de DynamoDB.
+resource "aws_lambda_permission" "allow_iot_dynamodb_writer" {
+  statement_id  = "AllowExecutionFromIoTDynamoDBRule${var.environment}"
+  action        = "lambda:InvokeFunction"
+  function_name = var.dynamodb_writer_lambda_function_name
+  principal     = "iot.amazonaws.com"
+  source_arn    = aws_iot_topic_rule.dynamodb_rule.arn
+}
+
 # Regla 2 de S3:
-# De forma paralela a la regla anterior, intercepta los mismos mensajes de 'lab/sensors/data'.
-# En lugar de base de datos, ejecuta la acción "s3", guardando el payload como un archivo JSON.
-# La llave (key) usa funciones de interpolación internas de AWS IoT ($${parse_time...}) para organizar los archivos 
-# en carpetas particionadas por año/mes/día directamente, optimizando futuras consultas analíticas (Athena).
+# Mantiene una copia historica de todos los eventos como JSON particionado por fecha.
 resource "aws_iot_topic_rule" "s3_rule" {
   name        = "SensorDataToS3_${var.environment}"
   description = "Guarda los eventos de sensores en S3 particionados por fecha"
@@ -159,8 +140,7 @@ resource "aws_iot_topic_rule" "s3_rule" {
 }
 
 # Regla 3 de Alertas por temperatura:
-# Escucha cualquier topico con forma 'lab/<sensor>/data' y filtra solo eventos de temperatura
-# cuyo valor supere 30. Cuando el filtro se cumple, IoT Core invoca la Lambda de alerta.
+# Escucha eventos de temperatura mayores a 30 y dispara la Lambda de alertas hacia SQS/CloudWatch.
 resource "aws_iot_topic_rule" "temperature_alert_rule" {
   name        = "TemperatureAlertToLambda_${var.environment}"
   description = "Dispara una Lambda cuando un sensor de temperatura supera el umbral critico"
@@ -173,8 +153,7 @@ resource "aws_iot_topic_rule" "temperature_alert_rule" {
   }
 }
 
-# Permiso para que AWS IoT Core pueda invocar la Lambda de alerta.
-# Sin esta politica basada en recurso, la regla existiria pero fallaria al ejecutar la accion Lambda.
+# Permite que IoT Core invoque la Lambda de alerta.
 resource "aws_lambda_permission" "allow_iot_temperature_alert" {
   statement_id  = "AllowExecutionFromIoTAlertRule${var.environment}"
   action        = "lambda:InvokeFunction"

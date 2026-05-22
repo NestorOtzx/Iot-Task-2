@@ -17,3 +17,13 @@ output "emergency_log_group_name" {
   value       = aws_cloudwatch_log_group.emergency_alerts.name
   description = "Nombre del log group dedicado para alertas de urgencia."
 }
+
+output "dynamodb_writer_lambda_arn" {
+  value       = aws_lambda_function.dynamodb_retention_writer.arn
+  description = "ARN de la Lambda que escribe en DynamoDB y aplica retencion de 10 eventos por sensor."
+}
+
+output "dynamodb_writer_lambda_function_name" {
+  value       = aws_lambda_function.dynamodb_retention_writer.function_name
+  description = "Nombre de la Lambda que escribe en DynamoDB y aplica retencion de 10 eventos por sensor."
+}
