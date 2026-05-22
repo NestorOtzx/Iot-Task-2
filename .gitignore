@@ -2,7 +2,9 @@
 .terraform/
 
 # Local solution workspace with generated certificates, packages, and lab artifacts
-Solution/
+Solution/edge_gateway/certs
+Solution/edge_gateway/mosquitto.conf
+Solution/terraform/modules/compute/*.zip
 
 # .tfstate files
 *.tfstate
