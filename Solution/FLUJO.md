@@ -62,16 +62,18 @@ Hemos configurado dos reglas principales:
    - **Estructura:** Se organizan automáticamente por particiones de tiempo (`year=.../month=.../day=...`), lo cual facilita procesos históricos posteriores sin depender de un motor analítico adicional.
 
 2. **Regla de DynamoDB (Hot Data / Últimos 10 Eventos):**
-   - **Objetivo:** Mantener una ventana corta con los últimos 10 eventos de cada sensor para consultas rápidas.
-   - **Acción:** Invoca una Lambda que inserta el evento en **Amazon DynamoDB** y elimina los registros antiguos que excedan el límite por sensor.
+   - **Objetivo:** Mantener un ítem clave-valor por sensor con su estado actual y una ventana corta de los últimos 10 eventos.
+   - **Acción:** Invoca una Lambda que actualiza el ítem existente del sensor en **Amazon DynamoDB**. Si el sensor no existe, la Lambda falla de forma controlada y no crea el sensor automáticamente.
 
 ### Diseño de la Tabla en DynamoDB
-La tabla `SensorData` fue diseñada para conservar una ventana corta por sensor:
+La tabla `SensorData` fue diseñada como una base clave-valor para sensores:
 - Tiene una **Clave de Partición (Partition Key o Hash Key)** llamada `device_id`.
-- Tiene una **Clave de Ordenamiento (Sort Key)** llamada `timestamp`.
+- No tiene clave de ordenamiento porque cada sensor debe vivir en un único ítem.
 
 **¿Qué pasa cuando se mandan eventos a DynamoDB?**
-Cada evento se guarda como un registro independiente bajo el mismo `device_id`, ordenado por `timestamp`. Después de insertar, una Lambda consulta los eventos de ese sensor y elimina los más antiguos para conservar únicamente los últimos 10.
+Cada evento entrante actualiza el ítem del sensor existente. Dentro de ese ítem se guarda el evento actual y una lista `recent_events` con máximo 10 registros. Si llega información de un `device_id` que no existe, se registra el error y no se crea un nuevo sensor desde el flujo de ingesta.
+
+Terraform crea por defecto los sensores `sensor-temp-01` y `sensor-humidity-01`, que son los dos contenedores incluidos en `docker-compose.yml`. Esto permite que el laboratorio funcione apenas se despliega la infraestructura, sin relajar la regla de negocio: los sensores nuevos no deben aparecer automáticamente por publicar datos, sino por el flujo administrativo o API correspondiente.
 
 ---
 
@@ -91,7 +93,7 @@ graph TD
         IOT -->|Regla SQL: SELECT *| DynamoAction(Acción DynamoDB)
         
         S3Action -->|PutObject| S3Bucket[(S3 Bucket\nDatos Históricos)]
-        DynamoAction -->|Lambda PutItem + Delete antiguos| DDB[(DynamoDB\nÚltimos 10 Eventos)]
+        DynamoAction -->|Lambda UpdateItem| DDB[(DynamoDB\nItem por Sensor)]
     end
     
     style S1 fill:#f9f,stroke:#333,stroke-width:2px
@@ -107,5 +109,5 @@ graph TD
 2. Mosquitto recibe los datos localmente y los enruta automáticamente a AWS IoT Core usando una conexión encriptada y autenticada por certificados X.509 generados por Terraform.
 3. AWS IoT Core procesa los datos en tiempo real mediante su motor de reglas.
 4. El dato se bifurca:
-   - Una copia actualiza la ventana rápida en DynamoDB, manteniendo únicamente los últimos 10 eventos por sensor.
+   - Una copia actualiza el ítem del sensor en DynamoDB, manteniendo `recent_events` con únicamente los últimos 10 eventos.
    - Una copia se archiva permanentemente en S3 como historial completo.

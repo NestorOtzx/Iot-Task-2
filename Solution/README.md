@@ -154,6 +154,7 @@ Mientras los contenedores corren y se envían datos:
 - Ir a la consola de AWS -> **DynamoDB** -> **Tablas**.
 - Hacer clic en `SensorData` -> **Explorar elementos de la tabla**.
 - Observar eventos tanto de `sensor-temp-01` como de `sensor-humidity-01`.
+- Terraform crea estos dos sensores iniciales como ítems registrados. La ingesta IoT solo actualiza sensores existentes; si un `device_id` nuevo publica datos sin haberse creado antes, la Lambda lo rechazará sin crear el sensor automáticamente.
 
 ---
 

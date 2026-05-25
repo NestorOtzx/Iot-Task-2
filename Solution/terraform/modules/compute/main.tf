@@ -15,7 +15,7 @@ data "archive_file" "lambda_cloudwatch_zip" {
 }
 
 # Empaqueta la Lambda que reemplaza la escritura directa de IoT a DynamoDB.
-# Esta funcion guarda cada evento y elimina los registros antiguos para dejar maximo 10 por sensor.
+# Esta función actualiza un sensor existente y conserva recent_events con máximo 10 registros.
 data "archive_file" "dynamodb_retention_writer_zip" {
   type        = "zip"
   source_file = "${path.root}/src/dynamodb_retention_writer/lambda_function.py"
@@ -112,7 +112,7 @@ resource "aws_lambda_event_source_mapping" "alert_queue_to_cloudwatch" {
 }
 
 # Lambda que recibe todos los eventos de sensores desde IoT Core.
-# Escribe el evento en DynamoDB y aplica la regla de negocio: maximo 10 registros por device_id.
+# No crea sensores nuevos: solo actualiza ítems existentes y mantiene la ventana de últimos 10 eventos.
 resource "aws_lambda_function" "dynamodb_retention_writer" {
   function_name                  = "${var.project_name}-${var.environment}-dynamodb-retention-writer"
   role                           = var.lab_role_arn

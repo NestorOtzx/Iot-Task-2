@@ -20,10 +20,10 @@ output "emergency_log_group_name" {
 
 output "dynamodb_writer_lambda_arn" {
   value       = aws_lambda_function.dynamodb_retention_writer.arn
-  description = "ARN de la Lambda que escribe en DynamoDB y aplica retencion de 10 eventos por sensor."
+  description = "ARN de la Lambda que actualiza sensores existentes en DynamoDB."
 }
 
 output "dynamodb_writer_lambda_function_name" {
   value       = aws_lambda_function.dynamodb_retention_writer.function_name
-  description = "Nombre de la Lambda que escribe en DynamoDB y aplica retencion de 10 eventos por sensor."
+  description = "Nombre de la Lambda que actualiza sensores existentes en DynamoDB."
 }
