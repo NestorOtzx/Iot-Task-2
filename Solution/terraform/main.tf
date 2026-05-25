@@ -65,7 +65,7 @@ module "iot" {
   alert_lambda_arn           = module.compute.alert_lambda_arn
   alert_lambda_function_name = module.compute.alert_lambda_function_name
 
-  # Lambda que escribe en DynamoDB y mantiene un maximo de 10 registros por sensor.
+  # Lambda que actualiza sensores existentes en DynamoDB y mantiene recent_events con máximo 10 registros.
   dynamodb_writer_lambda_arn           = module.compute.dynamodb_writer_lambda_arn
   dynamodb_writer_lambda_function_name = module.compute.dynamodb_writer_lambda_function_name
 }

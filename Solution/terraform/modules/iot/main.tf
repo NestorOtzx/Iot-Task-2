@@ -101,10 +101,11 @@ EOT
 }
 
 # Regla 1 de DynamoDB:
-# Envia cada evento a una Lambda que escribe en DynamoDB y elimina registros antiguos para conservar 10 por sensor.
+# Envía cada evento a una Lambda que actualiza un sensor existente en DynamoDB.
+# Si el sensor no existe, la Lambda falla de forma controlada y no crea sensores automáticamente.
 resource "aws_iot_topic_rule" "dynamodb_rule" {
   name        = "SensorDataToDynamoDB_${var.environment}"
-  description = "Guarda los ultimos 10 eventos por sensor en DynamoDB"
+  description = "Actualiza el ítem del sensor con sus últimos 10 eventos en DynamoDB"
   enabled     = true
   sql         = "SELECT * FROM 'lab/sensors/data'"
   sql_version = "2016-03-23"
@@ -114,7 +115,7 @@ resource "aws_iot_topic_rule" "dynamodb_rule" {
   }
 }
 
-# Permite que IoT Core invoque la Lambda de escritura y retencion de DynamoDB.
+# Permite que IoT Core invoque la Lambda de actualización de DynamoDB.
 resource "aws_lambda_permission" "allow_iot_dynamodb_writer" {
   statement_id  = "AllowExecutionFromIoTDynamoDBRule${var.environment}"
   action        = "lambda:InvokeFunction"
