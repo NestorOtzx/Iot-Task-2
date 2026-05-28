@@ -37,11 +37,17 @@ def _to_decimal(value):
 
 def _sensor_event(payload):
     """Normaliza el evento que se agregará al arreglo recent_events del sensor."""
-    return {
+    event = {
         "sensor_type": payload.get("sensor_type", "unknown"),
         "value": _to_decimal(payload["value"]),
         "timestamp": _normalize_timestamp(payload.get("timestamp")),
     }
+
+    # La unidad es opcional para no romper sensores existentes que aun no la envian.
+    if payload.get("unit"):
+        event["unit"] = str(payload["unit"])
+
+    return event
 
 
 def _validate_payload(payload):
@@ -73,26 +79,33 @@ def _recent_events_with_new_event(sensor, new_event):
 
 def _update_existing_sensor(device_id, new_event, recent_events):
     """Actualiza el ítem clave-valor del sensor sin crear sensores nuevos accidentalmente."""
+    update_expression = (
+        "SET sensor_type = :sensor_type, "
+        "current_event = :current_event, "
+        "last_value = :last_value, "
+        "last_timestamp = :last_timestamp, "
+        "recent_events = :recent_events, "
+        "updated_at = :updated_at"
+    )
+    expression_attribute_values = {
+        ":sensor_type": new_event["sensor_type"],
+        ":current_event": new_event,
+        ":last_value": new_event["value"],
+        ":last_timestamp": new_event["timestamp"],
+        ":recent_events": recent_events,
+        ":updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    # Si el sensor publica unidad, tambien la conservamos como metadato del sensor.
+    if new_event.get("unit"):
+        update_expression = f"{update_expression}, sensor_unit = :sensor_unit"
+        expression_attribute_values[":sensor_unit"] = new_event["unit"]
+
     table.update_item(
         Key={"device_id": device_id},
         ConditionExpression="attribute_exists(device_id)",
-        UpdateExpression="""
-            SET
-                sensor_type = :sensor_type,
-                current_event = :current_event,
-                last_value = :last_value,
-                last_timestamp = :last_timestamp,
-                recent_events = :recent_events,
-                updated_at = :updated_at
-        """,
-        ExpressionAttributeValues={
-            ":sensor_type": new_event["sensor_type"],
-            ":current_event": new_event,
-            ":last_value": new_event["value"],
-            ":last_timestamp": new_event["timestamp"],
-            ":recent_events": recent_events,
-            ":updated_at": datetime.now(timezone.utc).isoformat(),
-        },
+        UpdateExpression=update_expression,
+        ExpressionAttributeValues=expression_attribute_values,
     )
 
 

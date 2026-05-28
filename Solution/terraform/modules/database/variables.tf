@@ -18,3 +18,9 @@ variable "default_sensors" {
     }
   }
 }
+
+variable "rds_allowed_cidr_blocks" {
+  description = "CIDR permitidos para conectarse a PostgreSQL en el laboratorio."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}

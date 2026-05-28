@@ -27,3 +27,8 @@ output "dynamodb_writer_lambda_function_name" {
   value       = aws_lambda_function.dynamodb_retention_writer.function_name
   description = "Nombre de la Lambda que actualiza sensores existentes en DynamoDB."
 }
+
+output "s3_to_rds_lambda_function_name" {
+  value       = aws_lambda_function.s3_to_rds.function_name
+  description = "Nombre de la Lambda que persiste objetos JSON de S3 en PostgreSQL."
+}
