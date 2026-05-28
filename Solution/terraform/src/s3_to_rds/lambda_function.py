@@ -1,16 +1,10 @@
 import json
 import os
-import sys
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import unquote_plus
 
 import boto3
-
-# Las dependencias puras de Python se guardan en vendor para que Terraform pueda comprimir
-# la Lambda sin ejecutar pip ni Docker durante terraform apply.
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "vendor"))
-
 import pg8000.dbapi
 
 

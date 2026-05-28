@@ -24,7 +24,7 @@ data "archive_file" "dynamodb_retention_writer_zip" {
 
 # Ruta de Lambda historica.
 locals {
-  s3_to_rds_source_dir = abspath("${path.root}/src/s3_to_rds")
+  s3_to_rds_source_dir = abspath("${path.module}/.build/s3_to_rds")
 }
 
 # Empaqueta Lambda S3 a RDS.

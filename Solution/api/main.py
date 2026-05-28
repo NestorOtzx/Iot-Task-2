@@ -166,9 +166,6 @@ def get_current_sensor_value(device_id: str) -> dict[str, Any]:
     """Devuelve el evento actual guardado en DynamoDB para un sensor."""
     sensor = _get_sensor_or_404(device_id)
     current_event = sensor.get("current_event")
-    if not current_event:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sensor sin datos actuales")
-
     return {
         "device_id": device_id,
         "sensor_type": sensor.get("sensor_type"),

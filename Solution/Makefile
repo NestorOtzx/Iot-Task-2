@@ -1,4 +1,4 @@
-.PHONY: terraform-init terraform-apply-ecr terraform-apply-all docker-check aws-up aws-down api-push api-redeploy local-up local-down logs clean
+.PHONY: terraform-init lambda-package terraform-apply-ecr terraform-apply-all docker-check aws-up aws-down api-push api-redeploy local-up local-down logs clean
 
 AWS_REGION ?= us-east-1
 PROJECT_NAME ?= iot-edge
@@ -17,10 +17,16 @@ terraform-init:
 	mkdir -p edge_gateway/certs
 	cd terraform && terraform init
 
-terraform-apply-ecr: terraform-init
+lambda-package:
+	rm -rf terraform/modules/compute/.build/s3_to_rds
+	mkdir -p terraform/modules/compute/.build/s3_to_rds
+	cp terraform/src/s3_to_rds/lambda_function.py terraform/modules/compute/.build/s3_to_rds/
+	pip3 install -r terraform/src/s3_to_rds/requirements.txt -t terraform/modules/compute/.build/s3_to_rds
+
+terraform-apply-ecr: terraform-init lambda-package
 	cd terraform && terraform apply -target=module.api.aws_ecr_repository.api -auto-approve
 
-terraform-apply-all: terraform-init
+terraform-apply-all: terraform-init lambda-package
 	cd terraform && terraform apply -auto-approve
 
 aws-up: terraform-apply-ecr api-push terraform-apply-all

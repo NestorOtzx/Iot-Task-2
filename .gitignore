@@ -5,6 +5,10 @@
 Solution/edge_gateway/certs
 Solution/edge_gateway/mosquitto.conf
 Solution/terraform/modules/compute/*.zip
+Solution/terraform/modules/compute/.build/
+Solution/terraform/src/s3_to_rds/vendor/
+__pycache__/
+*.pyc
 
 # .tfstate files
 *.tfstate
