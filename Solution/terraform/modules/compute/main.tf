@@ -22,6 +22,18 @@ data "archive_file" "dynamodb_retention_writer_zip" {
   output_path = "${path.module}/dynamodb_retention_writer.zip"
 }
 
+# Ruta de Lambda historica.
+locals {
+  s3_to_rds_source_dir = abspath("${path.module}/.build/s3_to_rds")
+}
+
+# Empaqueta Lambda S3 a RDS.
+data "archive_file" "s3_to_rds_zip" {
+  type        = "zip"
+  source_dir  = local.s3_to_rds_source_dir
+  output_path = "${path.module}/s3_to_rds.zip"
+}
+
 # Cola SQS que desacopla la alerta recibida por IoT del procesamiento en CloudWatch.
 # Si la Lambda de CloudWatch falla temporalmente, SQS conserva el mensaje para reintentos.
 resource "aws_sqs_queue" "alert_queue" {
@@ -134,4 +146,53 @@ resource "aws_lambda_function" "dynamodb_retention_writer" {
     Environment = var.environment
     Project     = var.project_name
   }
+}
+
+# Lambda historica por S3.
+resource "aws_lambda_function" "s3_to_rds" {
+  function_name    = "${var.project_name}-${var.environment}-s3-to-rds-history"
+  role             = var.lab_role_arn
+  handler          = "lambda_function.lambda_handler"
+  runtime          = "python3.12"
+  filename         = data.archive_file.s3_to_rds_zip.output_path
+  source_code_hash = data.archive_file.s3_to_rds_zip.output_base64sha256
+  timeout          = 30
+
+  environment {
+    variables = {
+      SENSOR_TABLE_NAME = var.sensor_table_name
+      RDS_HOST          = var.rds_host
+      RDS_PORT          = tostring(var.rds_port)
+      RDS_DB_NAME       = var.rds_db_name
+      RDS_USERNAME      = var.rds_username
+      RDS_PASSWORD      = var.rds_password
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+# Permiso S3 hacia Lambda.
+resource "aws_lambda_permission" "allow_s3_to_rds" {
+  statement_id  = "AllowExecutionFromS3History${var.environment}"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.s3_to_rds.function_name
+  principal     = "s3.amazonaws.com"
+  source_arn    = "arn:aws:s3:::${var.sensor_bucket_name}"
+}
+
+# Trigger S3 ObjectCreated.
+resource "aws_s3_bucket_notification" "sensor_data_to_rds" {
+  bucket = var.sensor_bucket_name
+
+  lambda_function {
+    lambda_function_arn = aws_lambda_function.s3_to_rds.arn
+    events              = ["s3:ObjectCreated:*"]
+    filter_suffix       = ".json"
+  }
+
+  depends_on = [aws_lambda_permission.allow_s3_to_rds]
 }

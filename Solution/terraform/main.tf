@@ -12,6 +12,10 @@ terraform {
       source  = "hashicorp/archive"
       version = "~> 2.4"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 }
 
@@ -35,11 +39,37 @@ module "database" {
 
 # Modulo de Computo (Lambdas, SQS y CloudWatch Logs)
 module "compute" {
-  source            = "./modules/compute"
+  source             = "./modules/compute"
+  project_name       = var.project_name
+  environment        = var.environment
+  lab_role_arn       = data.aws_iam_role.lab_role.arn
+  sensor_table_name  = module.database.sensor_table_name
+  sensor_bucket_name = module.storage.sensor_bucket_name
+
+  # Conexion RDS para Lambda historica.
+  rds_host     = module.database.sensor_history_db_address
+  rds_port     = module.database.sensor_history_db_port
+  rds_db_name  = module.database.sensor_history_db_name
+  rds_username = module.database.sensor_history_db_username
+  rds_password = module.database.sensor_history_db_password
+}
+
+# Modulo de API FastAPI.
+module "api" {
+  source            = "./modules/api"
   project_name      = var.project_name
   environment       = var.environment
+  region            = data.aws_region.current.name
   lab_role_arn      = data.aws_iam_role.lab_role.arn
   sensor_table_name = module.database.sensor_table_name
+  api_desired_count = var.api_desired_count
+
+  # Conexion RDS para FastAPI.
+  rds_host     = module.database.sensor_history_db_address
+  rds_port     = module.database.sensor_history_db_port
+  rds_db_name  = module.database.sensor_history_db_name
+  rds_username = module.database.sensor_history_db_username
+  rds_password = module.database.sensor_history_db_password
 }
 
 # Módulo de IoT Core

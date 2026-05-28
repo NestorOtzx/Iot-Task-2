@@ -9,10 +9,48 @@ import paho.mqtt.client as mqtt
 MQTT_HOST = os.environ.get("MQTT_HOST", "localhost")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", 1883))
 CLIENT_ID = os.environ.get("CLIENT_ID", f"sensor-{random.randint(1000,9999)}")
-SENSOR_TYPE = os.environ.get("SENSOR_TYPE", "temperature") # temperature, humidity, etc.
+SENSOR_TYPE = os.environ.get("SENSOR_TYPE", "temperature") # temperature, humidity o cualquier tipo nuevo.
 INTERVAL = int(os.environ.get("INTERVAL", 5))
+SENSOR_MIN_VALUE = os.environ.get("SENSOR_MIN_VALUE")
+SENSOR_MAX_VALUE = os.environ.get("SENSOR_MAX_VALUE")
+SENSOR_UNIT = os.environ.get("SENSOR_UNIT")
 
 TOPIC = "lab/sensors/data"
+
+
+def _optional_float(value):
+    """Convierte una variable opcional de entorno a float."""
+    return float(value) if value is not None else None
+
+
+def _sensor_range():
+    """Resuelve el rango de simulacion segun variables de entorno o tipo conocido."""
+    custom_min = _optional_float(SENSOR_MIN_VALUE)
+    custom_max = _optional_float(SENSOR_MAX_VALUE)
+
+    # Si el usuario define rango por entorno, este gana sobre los valores por defecto.
+    if custom_min is not None and custom_max is not None:
+        return custom_min, custom_max
+
+    # Rangos conocidos para los sensores iniciales del laboratorio.
+    if SENSOR_TYPE == "temperature":
+        return 20.0, 35.0
+    if SENSOR_TYPE == "humidity":
+        return 40.0, 60.0
+
+    # Fallback generico para cualquier sensor nuevo que se agregue en la sustentacion.
+    return 0.0, 100.0
+
+
+def _sensor_unit():
+    """Devuelve la unidad configurada o una unidad por defecto para tipos conocidos."""
+    if SENSOR_UNIT:
+        return SENSOR_UNIT
+    if SENSOR_TYPE == "temperature":
+        return "C"
+    if SENSOR_TYPE == "humidity":
+        return "%"
+    return "custom"
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -22,18 +60,14 @@ def on_connect(client, userdata, flags, rc):
 
 def generate_sensor_data():
     """Genera un dato simulado para este sensor."""
-    value = 0.0
-    if SENSOR_TYPE == "temperature":
-        value = round(random.uniform(20.0, 35.0), 2)
-    elif SENSOR_TYPE == "humidity":
-        value = round(random.uniform(40.0, 60.0), 2)
-    else:
-        value = round(random.uniform(0.0, 100.0), 2)
+    min_value, max_value = _sensor_range()
+    value = round(random.uniform(min_value, max_value), 2)
 
     return {
         "device_id": CLIENT_ID,
         "sensor_type": SENSOR_TYPE,
         "value": value,
+        "unit": _sensor_unit(),
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
