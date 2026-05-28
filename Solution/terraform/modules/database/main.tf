@@ -23,7 +23,10 @@ resource "aws_dynamodb_table" "sensor_data" {
   }
 }
 
-# Sensores iniciales registrados.
+# Sensores iniciales del laboratorio.
+# La Lambda de ingesta NO crea sensores automaticamente; solo actualiza items existentes.
+# Por eso sembramos los dos sensores definidos en docker-compose para que empiecen a recibir datos
+# apenas se despliegue la infraestructura. Sensores nuevos deberan crearse luego por el flujo/API administrativa.
 resource "aws_dynamodb_table_item" "default_sensors" {
   for_each = var.default_sensors
 

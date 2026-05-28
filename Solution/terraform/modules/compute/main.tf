@@ -1,18 +1,21 @@
-# Empaqueta Lambda de alertas.
+# Empaqueta el codigo Python de la Lambda que recibe eventos criticos desde IoT Core.
+# Terraform genera este ZIP localmente y lo sube al crear o actualizar la funcion.
 data "archive_file" "lambda_alerta_zip" {
   type        = "zip"
   source_file = "${path.root}/src/lambda_alerta/lambda_function.py"
   output_path = "${path.module}/lambda_alerta.zip"
 }
 
-# Empaqueta Lambda de CloudWatch.
+# Empaqueta el codigo Python de la Lambda que consume mensajes desde SQS.
+# Separar los ZIPs permite actualizar cada funcion de manera independiente.
 data "archive_file" "lambda_cloudwatch_zip" {
   type        = "zip"
   source_file = "${path.root}/src/lambda_cloudwatch/lambda_function.py"
   output_path = "${path.module}/lambda_cloudwatch.zip"
 }
 
-# Empaqueta Lambda de DynamoDB.
+# Empaqueta la Lambda que reemplaza la escritura directa de IoT a DynamoDB.
+# Esta función actualiza un sensor existente y conserva recent_events con máximo 10 registros.
 data "archive_file" "dynamodb_retention_writer_zip" {
   type        = "zip"
   source_file = "${path.root}/src/dynamodb_retention_writer/lambda_function.py"
@@ -31,7 +34,8 @@ data "archive_file" "s3_to_rds_zip" {
   output_path = "${path.module}/s3_to_rds.zip"
 }
 
-# Cola SQS de alertas.
+# Cola SQS que desacopla la alerta recibida por IoT del procesamiento en CloudWatch.
+# Si la Lambda de CloudWatch falla temporalmente, SQS conserva el mensaje para reintentos.
 resource "aws_sqs_queue" "alert_queue" {
   name                       = "${var.project_name}-${var.environment}-iot-alerts"
   visibility_timeout_seconds = 60
@@ -43,7 +47,8 @@ resource "aws_sqs_queue" "alert_queue" {
   }
 }
 
-# Log group de urgencias.
+# Log group dedicado para los eventos de urgencia generados por la segunda Lambda.
+# Este log group separa las alertas de negocio de los logs tecnicos propios de Lambda.
 resource "aws_cloudwatch_log_group" "emergency_alerts" {
   name              = "/iot/${var.project_name}/${var.environment}/emergency-alerts"
   retention_in_days = 7
@@ -54,13 +59,15 @@ resource "aws_cloudwatch_log_group" "emergency_alerts" {
   }
 }
 
-# Log stream de urgencias.
+# Log stream fijo donde la Lambda consumidora escribe los mensajes de urgencia.
+# Mantener un stream conocido facilita encontrar las alertas durante las pruebas del laboratorio.
 resource "aws_cloudwatch_log_stream" "emergency_alerts" {
   name           = "sqs-alert-consumer"
   log_group_name = aws_cloudwatch_log_group.emergency_alerts.name
 }
 
-# Lambda de alerta IoT.
+# Primera Lambda de la rama: recibe el payload filtrado por la regla de IoT Core.
+# Su responsabilidad es normalizar el evento critico y enviarlo a la cola SQS.
 resource "aws_lambda_function" "lambda_alerta" {
   function_name    = "${var.project_name}-${var.environment}-lambda-alerta"
   role             = var.lab_role_arn
@@ -82,7 +89,8 @@ resource "aws_lambda_function" "lambda_alerta" {
   }
 }
 
-# Lambda consumidora SQS.
+# Segunda Lambda de la rama: se activa con mensajes nuevos en SQS.
+# Lee cada alerta y la registra en el log group dedicado de CloudWatch Logs.
 resource "aws_lambda_function" "lambda_cloudwatch" {
   function_name                  = "${var.project_name}-${var.environment}-lambda-cloudwatch"
   role                           = var.lab_role_arn
@@ -106,7 +114,8 @@ resource "aws_lambda_function" "lambda_cloudwatch" {
   }
 }
 
-# Trigger SQS hacia Lambda.
+# Trigger administrado por Lambda para leer la cola SQS en lotes pequenos.
+# batch_size = 1 hace que cada alerta sea facil de rastrear durante las pruebas.
 resource "aws_lambda_event_source_mapping" "alert_queue_to_cloudwatch" {
   event_source_arn = aws_sqs_queue.alert_queue.arn
   function_name    = aws_lambda_function.lambda_cloudwatch.arn
@@ -114,7 +123,8 @@ resource "aws_lambda_event_source_mapping" "alert_queue_to_cloudwatch" {
   enabled          = true
 }
 
-# Lambda de datos recientes.
+# Lambda que recibe todos los eventos de sensores desde IoT Core.
+# No crea sensores nuevos: solo actualiza ítems existentes y mantiene la ventana de últimos 10 eventos.
 resource "aws_lambda_function" "dynamodb_retention_writer" {
   function_name                  = "${var.project_name}-${var.environment}-dynamodb-retention-writer"
   role                           = var.lab_role_arn
